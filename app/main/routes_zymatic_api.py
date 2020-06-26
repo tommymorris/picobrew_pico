@@ -1,20 +1,45 @@
-import json, uuid, os
+import json
+import uuid
+import os
 from datetime import datetime
-from pathlib import Path
-from time import mktime
-from flask import *
-from flask_socketio import emit
 from webargs import fields
 from webargs.flaskparser import use_args, FlaskParser
+
+from .. import socketio
 from . import main
 from .config import brew_active_sessions_path
 from .model import PicoBrewSession
 from .routes_frontend import get_zymatic_recipes
 from .session_parser import active_brew_sessions
-from .. import *
+
 
 arg_parser = FlaskParser()
 events = {}
+
+# usersetup: /API/usersetup?machine={}&admin=0
+#             Response: '\r\n#{0}/{1}|#' where {0} : Profile GUID, {1} = User Name
+user_setup_args = {
+    'machine': fields.Str(required=True),       # 12 character alpha-numeric Product ID
+    'admin': fields.Int(required=True),         # Always 0
+}
+@main.route('/API/usersetup')
+@use_args(user_setup_args, location='querystring')
+def process_user_setup(args):
+    profile_guid = uuid.uuid4().hex[:32]
+    user_name = "DefaultUser"  # TODO: Config parameter?
+    return '\r\n#{}/{}|#'.format(profile_guid, user_name)
+
+
+# firstSetup: /API/firstSetup?machine={}|1W_ADDR,1/1W_ADDR,2/1W_ADDR,3/1W_ADDR,4&admin=0
+#             Response: '\r\n'
+first_setup_args = {
+    'machine': fields.Str(required=True),       # 12 character alpha-numeric Product ID (1W_ADDR = 16 character alpha-numeric OneWire Address, i.e. 28b0123456789abc)
+    'admin': fields.Int(required=True),         # Always 0
+}
+@main.route('/API/firstSetup')
+@use_args(first_setup_args, location='querystring')
+def process_first_setup(args):
+    return '\r\n'
 
 
 # zymaticFirmwareCheck: /API/zymaticFirmwareCheck?machine={}&ver={}&maj={}&min={}
@@ -146,7 +171,7 @@ def process_log_session(args):
         session = args['session']
         uid = get_machine_by_session(session)
         temps = [int(temp[2:]) for temp in args['data'].split('|')]
-        session_data = {'time': ((datetime.utcnow()-datetime(1970, 1, 1)).total_seconds() * 1000),
+        session_data = {'time': ((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000),
                         'heat1': temps[0],
                         'wort': temps[1],
                         'board': temps[2],

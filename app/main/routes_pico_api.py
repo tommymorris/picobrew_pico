@@ -1,17 +1,15 @@
-import json, uuid
+import json
+import uuid
 from datetime import datetime
-from pathlib import Path
-from time import mktime
-from flask import *
-from flask_socketio import emit
 from webargs import fields
 from webargs.flaskparser import use_args, FlaskParser
+
+from .. import socketio
 from . import main
 from .config import brew_active_sessions_path
 from .model import PicoBrewSession, PICO_SESSION
 from .routes_frontend import get_pico_recipes
 from .session_parser import active_brew_sessions
-from .. import *
 
 arg_parser = FlaskParser()
 
@@ -77,7 +75,8 @@ def process_get_actions_needed(args):
 # Response: '\r\n'
 error_args = {
     'uid': fields.Str(required=True),       # 32 character alpha-numeric serial number
-    'rfid': fields.Str(required=True),      # 14 character alpha-numeric PicoPak RFID (could be blank)
+    'code': fields.Str(required=True),       # Integer error number
+    'rfid': fields.Str(required=False),      # 14 character alpha-numeric PicoPak RFID (could be blank)
 }
 @main.route('/API/pico/error')
 @use_args(error_args, location='querystring')
@@ -156,7 +155,7 @@ def process_log(args):
     uid = args['uid']
     if uid not in active_brew_sessions or active_brew_sessions[uid].name == 'Waiting To Brew':
         create_new_session(uid, args['sesId'], args['sesType'])
-    session_data = {'time': ((datetime.utcnow()-datetime(1970, 1, 1)).total_seconds() * 1000),
+    session_data = {'time': ((datetime.utcnow() - datetime(1970, 1, 1)).total_seconds() * 1000),
                     'timeLeft': args['timeLeft'],
                     'step': args['step'],
                     'wort': args['wort'],
