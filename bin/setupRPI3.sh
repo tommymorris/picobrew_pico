@@ -30,7 +30,8 @@ server {
         listen 80;
         server_name picobrew.com;
         location / {
-        return 301 https://\$host\$request_uri;
+        #return 301 https://\$host\$request_uri;
+      	proxy_pass http://localhost:8080;
         }
 }
 
