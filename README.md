@@ -1,6 +1,10 @@
 # picobrew_pico
 This fork is intended for PicoBrew Z Series support using a Raspberry Pi 3 to run the server. 
 
+The install scripts and RPI3 configuration here have not been tested for non-HTTPS Picobrew machines (Pico and Zymatic) but they should work.
+
+The install scripts and RPI3 configuration here have not been tested for RPI4 but should work. Raspberry PI 0, 1, and 2 are not supported.
+
 This repository is a fork of https://github.com/chiefwigms/picobrew_pico. Almost all code is theirs.  The scripts I added to enable Raspberry PI and create certificates for the Zseries are largely based on scripts from https://github.com/duffyco/planbeer.
 
 ## Requirements
@@ -9,13 +13,22 @@ Have a Raspberry PI 3.
 The RPI3 will reside in your home next to your WIFI router. 
 Plug a CAT6 cable into the back of your router and into the Ethernet port of your RPI3.
 
-The RPI3 will be turned into a Wifi access point with the following credentials.
+------   Ethernet(wire)     ----------     Wireless    -------------
+Router  <-------------->      Rpi 3      <---------->   PicoBrew Z
+------                      ----------                 -------------
+                           OS: Raspbian
+                            Vx: Docker
+                               App
+
+
+The RPI3 will be turned into a WIFI access point with the following credentials.
 SSID: picobrewers
 Passphrase: 12345678
 
 
-### 
-1. Use Rufus (https://rufus.ie/ I use the portable version) and "burn" buster to sdcard. 
+### How to install, start the server, and brew a beer. 
+1. Use Rufus (https://rufus.ie/ I use the portable version) and "burn" buster to sdcard.  Buster is the lastest version of the Raspberry PI Raspian operating system.
+
 https://www.raspberrypi.org/downloads/raspbian/ - (2020-02-13 for the guide).
 
 2. Go ahead and create an SSH file in the root.  This will activate the SSH server and save you from going downstairs.  I speak from experience.
