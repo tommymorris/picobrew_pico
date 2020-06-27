@@ -13,12 +13,15 @@ Have a Raspberry PI 3.
 The RPI3 will reside in your home next to your WIFI router. 
 Plug a CAT6 cable into the back of your router and into the Ethernet port of your RPI3.
 
+<pre>
 ------   Ethernet(wire)     ----------     Wireless    -------------
 Router  <-------------->      Rpi 3      <---------->   PicoBrew Z
 ------                      ----------                 -------------
                            OS: Raspbian
                             Vx: Docker
                                App
+
+</pre>
 
 
 The RPI3 will be turned into a WIFI access point with the following credentials.
