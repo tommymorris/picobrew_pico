@@ -27,30 +27,62 @@ EOF
 
 cat > /etc/nginx/sites-available/picobrew.com.conf <<EOF
 server {
-        listen 80;
-        server_name picobrew.com;
-        location / {
-        #return 301 https://\$host\$request_uri;
-      	proxy_pass http://localhost:8080;
-        }
+    listen 80;
+    server_name www.picobrew.com picobrew.com;
+
+    access_log                  /var/log/nginx/picobrew.access.log;
+    error_log                   /var/log/nginx/picobrew.error.log;
+    
+    location / {
+        aio threads;
+
+        proxy_set_header    Host \$http_host;
+        proxy_pass          http://localhost:8080;
+    }
+
+    location /socket.io {
+        aio threads;
+        
+        include proxy_params;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_pass http://localhost:8080/socket.io;
+    }
 }
 
 server {
     listen 443 ssl;
-    server_name picobrew.com;
-    ssl_certificate           /home/pi/picobrew_pico/certs/bundle.crt;
-    ssl_certificate_key       /home/pi/picobrew_pico/certs/server.key;
-    #access_log            /var/log/nginx/picobrew.access.log;
-    #error_log            /var/log/nginx/picobrew.error.log;
+    server_name www.picobrew.com picobrew.com;
 
+    ssl_certificate             /certs/bundle.crt;
+    ssl_certificate_key         /certs/server.key;
+    
+    access_log                  /var/log/nginx/picobrew.access.log;
+    error_log                   /var/log/nginx/picobrew.error.log;
+    
     location / {
-	proxy_set_header Host \$http_host;
-	proxy_set_header X-Real-IP \$remote_addr;
-	proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-	proxy_set_header X-Forwarded-Proto \$scheme;
-      	proxy_pass          http://localhost:8080;
+        aio threads;
+
+        proxy_set_header    Host \$http_host;
+        proxy_set_header    X-Real-IP \$remote_addr;
+        proxy_set_header    X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header    X-Forwarded-Proto \$scheme;
+        proxy_pass          http://localhost:8080;
     }
-  }
+    
+    location /socket.io {
+        aio threads;
+        
+        include proxy_params;
+        proxy_http_version 1.1;
+        proxy_buffering off;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "Upgrade";
+        proxy_pass http://localhost:8080/socket.io;
+    }
+}
 EOF
 
 sudo ln -s /etc/nginx/sites-available/picobrew.com.conf /etc/nginx/sites-enabled/picobrew.com.conf
