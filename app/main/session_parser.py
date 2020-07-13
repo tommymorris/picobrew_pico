@@ -42,8 +42,8 @@ def load_brew_session(file):
         'data': json_data,
         'graph': get_brew_graph_data(chart_id, name, step, json_data)
     }
-    if len(json_data) > 0:
-        session['recovery'] = json_data[-1]['recovery']
+    if len(json_data) > 0 and 'recovery' in json_data[-1]:
+        session.update({'recovery': json_data[-1]['recovery']})
     return (session)
 
 
@@ -163,7 +163,7 @@ def get_ferm_graph_data(chart_id, voltage, session_data):
 def restore_active_sessions():
     # initialize active sessions during start up
     if active_brew_sessions == {}:
-        print('DEBUG: restore_active_sessions() fetching abandoned server active sessions')
+        # print('DEBUG: restore_active_sessions() fetching abandoned server active sessions')
 
         active_brew_session_files = list(brew_active_sessions_path().glob("*.json"))
         for file in active_brew_session_files:
@@ -182,7 +182,7 @@ def restore_active_sessions():
             session.name = brew_session['name']
             session.type = brew_session['type']
             session.session = brew_session['session']           # session guid
-            session.id = -1                                     # session id (interger)
+            session.id = -1                                     # session id (integer)
 
             if 'recovery' in brew_session:
                 session.recovery = brew_session['recovery']     # find last step name

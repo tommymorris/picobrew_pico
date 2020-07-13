@@ -51,10 +51,15 @@ echo "samba-common samba-common/do_debconf boolean true" | debconf-set-selection
 
 # Remove classic networking & setup/enable systemd-resolved/networkd
 # https://raspberrypi.stackexchange.com/questions/89803/access-point-as-wifi-router-repeater-optional-with-bridge
+# https://raspberrypi.stackexchange.com/revisions/89804/26
 apt -y update
 #apt -y upgrade
 apt -y --autoremove purge ifupdown dhcpcd5 isc-dhcp-client isc-dhcp-common rsyslog avahi-daemon
 apt-mark hold ifupdown dhcpcd5 isc-dhcp-client isc-dhcp-common rsyslog raspberrypi-net-mods openresolv avahi-daemon libnss-mdns
+if [ -d "/boot/offline/deb" ]; then
+  # Speed up install with pre-packaged debs
+  dpkg -i /boot/offline/deb/*.deb
+fi
 apt -y install libnss-resolve hostapd dnsmasq dnsutils samba git python3 python3-pip nginx openssh-server
 
 # Install Picobrew server
@@ -63,6 +68,10 @@ cd /
 git clone https://github.com/chiefwigms/picobrew_pico.git
 cd /picobrew_pico
 git update-index --assume-unchanged config.yaml
+if [ -d "/boot/offline/pip" ]; then
+  # Speed up install with pre-packaged wheels
+  pip3 install /boot/offline/pip/*.whl
+fi
 pip3 install -r requirements.txt
 cd /
 
@@ -92,6 +101,7 @@ chmod 600 /etc/hostapd/hostapd.conf
 
 cp /lib/systemd/system/hostapd.service /etc/systemd/system/hostapd.service
 sed -i 's/After=/#After=/g' /etc/systemd/system/hostapd.service
+sed -i 's/.*DAEMON_CONF=.*/DAEMON_CONF="\/etc\/hostapd\/hostapd.conf"/' /etc/default/hostapd
 
 #SYSTEMD_EDITOR=tee systemctl edit hostapd.service <<EOF
 mkdir -p /etc/systemd/system/hostapd.service.d
@@ -100,7 +110,6 @@ cat > /etc/systemd/system/hostapd.service.d/override.conf <<EOF
 Wants=wpa_supplicant@wlan0.service
 
 [Service]
-Restart=no
 ExecStartPre=/sbin/iw dev wlan0 interface add ap0 type __ap
 ExecStopPost=-/sbin/iw dev ap0 del
 EOF
@@ -122,6 +131,8 @@ Wants=ap-bring-up.service
 Before=ap-bring-up.service
 
 [Service]
+ExecStartPost=/sbin/iptables -t nat -A POSTROUTING -o wlan0 -j MASQUERADE
+ExecStopPost=-/sbin/iptables -t nat -D POSTROUTING -o wlan0 -j MASQUERADE
 ExecStopPost=-/bin/ip link set ap0 up
 EOF
 
@@ -135,7 +146,6 @@ Requisite=hostapd.service
 Type=oneshot
 ExecStart=/lib/systemd/systemd-networkd-wait-online --interface=wlan0 --timeout=60 --quiet
 ExecStartPost=/bin/ip link set ap0 up
-ExecStartPost=/usr/bin/resolvectl dnssec ap0 no
 EOF
 
 # Setup br0
@@ -150,8 +160,8 @@ cat > /etc/systemd/network/04-eth0.network <<EOF
 [Match]
 Name=eth0
 [Network]
-DNSSEC=no
 Bridge=br0
+ConfigureWithoutCarrier=yes
 EOF
 
 # Setup wlan0
@@ -159,7 +169,7 @@ cat > /etc/systemd/network/08-wlan0.network <<EOF
 [Match]
 Name=wlan0
 [Network]
-DNSSEC=no
+IPForward=yes
 DHCP=yes
 EOF
 
@@ -167,12 +177,8 @@ cat > /etc/systemd/network/16-br0_up.network <<EOF
 [Match]
 Name=br0
 [Network]
-DNSSEC=no
 IPMasquerade=yes
 Address=${AP_IP}/24
-DHCPServer=yes
-[DHCPServer]
-DNS=${AP_IP}
 EOF
 
 # Disable resolved DNS stub listener & point to localhost (dnsmasq) 
@@ -194,6 +200,8 @@ address=/www.picobrew.com/${AP_IP}
 server=8.8.8.8
 server=8.8.4.4
 server=1.1.1.1
+interface=br0
+  dhcp-range=192.168.72.100,192.168.72.200,255.255.255.0,24h
 EOF
 
 # Add picobrew to /etc/hosts
@@ -231,9 +239,13 @@ cat > /etc/nginx/sites-available/picobrew.com.conf <<EOF
 server {
     listen 80;
     server_name www.picobrew.com picobrew.com;
+
+    access_log                  /var/log/nginx/picobrew.access.log;
+    error_log                   /var/log/nginx/picobrew.error.log;
     
     location / {
         aio threads;
+
         proxy_set_header    Host \$http_host;
         proxy_pass          http://localhost:8080;
     }
@@ -244,7 +256,7 @@ server {
         include proxy_params;
         proxy_http_version 1.1;
         proxy_buffering off;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "Upgrade";
         proxy_pass http://localhost:8080/socket.io;
     }
@@ -253,12 +265,16 @@ server {
 server {
     listen 443 ssl;
     server_name www.picobrew.com picobrew.com;
+
     ssl_certificate             /certs/bundle.crt;
     ssl_certificate_key         /certs/server.key;
+    
     access_log                  /var/log/nginx/picobrew.access.log;
     error_log                   /var/log/nginx/picobrew.error.log;
     
     location / {
+        aio threads;
+
         proxy_set_header    Host \$http_host;
         proxy_set_header    X-Real-IP \$remote_addr;
         proxy_set_header    X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -267,17 +283,17 @@ server {
     }
     
     location /socket.io {
+        aio threads;
+        
         include proxy_params;
         proxy_http_version 1.1;
         proxy_buffering off;
-        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Upgrade \$http_upgrade;
         proxy_set_header Connection "Upgrade";
         proxy_pass http://localhost:8080/socket.io;
     }
 }
 EOF
-
-sudo sed -i 's/sendfile on;/client_max_body_size;\ \ 10m\n\tsendfile on;/g' /etc/nginx/nginx.conf
 
 ln -s /etc/nginx/sites-available/picobrew.com.conf /etc/nginx/sites-enabled/picobrew.com.conf
 rm /etc/nginx/sites-enabled/default

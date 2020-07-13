@@ -2,7 +2,7 @@ import json
 import uuid
 import os
 from datetime import datetime
-from flask import current_app, request, Response, abort
+from flask import current_app, request, Response, abort, send_from_directory
 from webargs import fields
 from webargs.flaskparser import use_args, FlaskParser
 from enum import Enum
@@ -10,7 +10,7 @@ from random import seed, randint
 
 from .. import socketio
 from . import main
-from .config import brew_active_sessions_path
+from .config import brew_active_sessions_path, zseries_firmware_path
 from .model import PicoBrewSession
 from .routes_frontend import get_zseries_recipes, load_brew_sessions
 from .session_parser import active_brew_sessions
@@ -22,8 +22,8 @@ seed(1)
 events = {}
 
 latest_firmware = {
-    "version": "0.0.119",
-    "source": "https://picobrewcontent.blob.core.windows.net/firmware/zseries/zseries_0_0_119.bin"
+    "version": "0.0.116",
+    "source": "https://picobrew.com/firmware/zseries/zseries_0_0_116.bin"
 }
 
 
@@ -48,6 +48,20 @@ class ZProgramId(int, Enum):
     CLEAN = 12
     BEER_OR_COFFEE = 24
     CHILL = 27
+
+
+def convertTemp(temp: float, units: str):
+    if units.upper() == 'F':
+        return (temp * 9/5) + 32  # convert celcius to fahrenheit
+    return (temp - 32) * 5/9  # convert fahrenheit to celcius
+
+
+# Get Firmware: /firmware/zseries/<version>
+#     Response: RAW Bin File
+@main.route('/firmware/zseries/<file>', methods=['GET'])
+def process_zseries_firmware(file):
+    current_app.logger.debug('DEBUG: ZSeries fetch firmware file={}'.format(file))
+    return send_from_directory(zseries_firmware_path(), file)
 
 
 # ZState: PUT /Vendors/input.cshtml?type=ZState&token={}
@@ -315,7 +329,7 @@ def create_session(token, body):
         events[session_id] = []
 
     active_brew_sessions[uid].file = open(active_brew_sessions[uid].filepath, 'w')
-    active_brew_sessions[uid].file.write('[\n')
+    active_brew_sessions[uid].file.write('[')
     active_brew_sessions[uid].file.flush()
 
     ret = {
@@ -392,11 +406,12 @@ def update_session_log(token, body):
         'timeStr': log_time.isoformat(),
         'timeLeft': body['SecondsRemaining'],
         'step': body['StepName'],
-        'target': body['TargetTemp'],
-        'ambient': body['AmbientTemp'],
-        'drain': body['DrainTemp'],
-        'wort': body['WortTemp'],
-        'therm': body['ThermoBlockTemp'],
+        # temperatures from Z are in celsius vs prior device series
+        'target': convertTemp(body['TargetTemp'], 'F'),
+        'ambient': convertTemp(body['AmbientTemp'], 'F'),
+        'drain': convertTemp(body['DrainTemp'], 'F'),
+        'wort': convertTemp(body['WortTemp'], 'F'),
+        'therm': convertTemp(body['ThermoBlockTemp'], 'F'),
         'recovery': body['StepName'],
         'position': body['ValvePosition']
     }
@@ -419,7 +434,7 @@ def update_session_log(token, body):
                                'event': event,
                                })
     socketio.emit('brew_session_update|{}'.format(uid), graph_update)
-    active_brew_sessions[uid].file.write('\t{},\n'.format(json.dumps(session_data)))
+    active_brew_sessions[uid].file.write('\n\t{},'.format(json.dumps(session_data)))
     active_brew_sessions[uid].file.flush()
 
     ret = {
@@ -467,7 +482,7 @@ def close_session(uid, session_id, body):
         })
 
     active_brew_sessions[uid].file.seek(0, os.SEEK_END)
-    active_brew_sessions[uid].file.seek(active_brew_sessions[uid].file.tell() - 2, os.SEEK_SET)  # Remove trailing , from last data set
+    active_brew_sessions[uid].file.seek(active_brew_sessions[uid].file.tell() - 1, os.SEEK_SET)  # Remove trailing , from last data set
     active_brew_sessions[uid].file.write('\n]')
     active_brew_sessions[uid].cleanup()
 

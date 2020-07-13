@@ -1,12 +1,16 @@
 import json
+import os
 import requests
+import sys
 import uuid
-from flask import render_template, request
+from flask import render_template, request, redirect
+from threading import Thread
+from time import sleep
 
 from . import main
 from .recipe_parser import PicoBrewRecipe, PicoBrewRecipeImport, ZymaticRecipe, ZymaticRecipeImport, ZSeriesRecipe
 from .session_parser import load_ferm_session, get_ferm_graph_data, get_brew_graph_data, load_brew_session, active_brew_sessions, active_ferm_sessions
-from .config import zymatic_recipe_path, zseries_recipe_path, pico_recipe_path, ferm_archive_sessions_path, brew_archive_sessions_path
+from .config import base_path, zymatic_recipe_path, zseries_recipe_path, pico_recipe_path, ferm_archive_sessions_path, brew_archive_sessions_path
 
 
 # -------- Routes --------
@@ -14,6 +18,34 @@ from .config import zymatic_recipe_path, zseries_recipe_path, pico_recipe_path, 
 def index():
     return render_template('index.html', brew_sessions=load_active_brew_sessions(),
                            ferm_sessions=load_active_ferm_sessions())
+
+
+@main.route('/restart_server')
+def restart_server():
+    # git pull & install any updated requirements
+    os.system('cd {0};git pull;pip3 install -r requirements.txt'.format(base_path()))
+    # TODO: Close file handles for open sessions?
+
+    def restart():
+        sleep(2)
+        os.execl(sys.executable, *([sys.executable]+sys.argv))
+    thread = Thread(target=restart, daemon=True)
+    thread.start()
+    return redirect('/')
+
+
+@main.route('/restart_system')
+def restart_system():
+    os.system('shutdown -r now')
+    # TODO: redirect to a page with alert of restart
+    return redirect('/')
+
+
+@main.route('/shutdown_system')
+def shutdown_system():
+    os.system('shutdown -h now')
+    # TODO: redirect to a page with alert of shutdown
+    return redirect('/')
 
 
 @main.route('/brew_history')
@@ -30,7 +62,8 @@ def ferm_history():
 def _zymatic_recipes():
     global zymatic_recipes
     zymatic_recipes = load_zymatic_recipes()
-    return render_template('zymatic_recipes.html', recipes=zymatic_recipes)
+    recipes_dict = [json.loads(json.dumps(recipe, default=lambda r: r.__dict__)) for recipe in zymatic_recipes]
+    return render_template('zymatic_recipes.html', recipes=recipes_dict)
 
 
 @main.route('/new_zymatic_recipe', methods=['GET', 'POST'])
@@ -73,6 +106,29 @@ def import_zymatic_recipe():
         return render_template('import_zymatic_recipe.html')
 
 
+@main.route('/update_zymatic_recipe', methods=['POST'])
+def update_zymatic_recipe():
+    update = request.get_json()
+    files = list(zymatic_recipe_path().glob("*.json"))
+    for filename in files:
+        recipe = load_zymatic_recipe(filename)
+        if recipe.id == update['id']:
+            recipe.update_steps(filename, update['steps'])
+    return '', 204
+
+
+@main.route('/delete_zymatic_recipe', methods=['GET', 'POST'])
+def delete_zymatic_recipe():
+    recipe_id = request.get_json()
+    files = list(zymatic_recipe_path().glob("*.json"))
+    for filename in files:
+        recipe = load_zymatic_recipe(filename)
+        if recipe.id == recipe_id:
+            os.remove(filename)
+            return '', 204
+    return 'Delete Recipe: Failed to find recipe id \"' + recipe_id + '\"', 418
+
+
 def load_zymatic_recipes():
     files = list(zymatic_recipe_path().glob("*.json"))
     recipes = [load_zymatic_recipe(file) for file in files]
@@ -94,7 +150,8 @@ def get_zymatic_recipes():
 def _zseries_recipes():
     global zseries_recipes
     zseries_recipes = load_zseries_recipes()
-    return render_template('zseries_recipes.html', recipes=zseries_recipes)
+    recipes_dict = [json.loads(json.dumps(recipe, default=lambda r: r.__dict__)) for recipe in zseries_recipes]
+    return render_template('zseries_recipes.html', recipes=recipes_dict)
 
 
 @main.route('/new_zseries_recipe')
@@ -114,6 +171,29 @@ def new_zseries_recipe_save():
         return '', 204
     else:
         return 'Recipe Exists!', 418
+
+
+@main.route('/update_zseries_recipe', methods=['POST'])
+def update_zseries_recipe():
+    update = request.get_json()
+    files = list(zseries_recipe_path().glob("*.json"))
+    for filename in files:
+        recipe = load_zseries_recipe(filename)
+        if str(recipe.id) == update['id']:
+            recipe.update_steps(filename, update['steps'])
+    return '', 204
+
+
+@main.route('/delete_zseries_recipe', methods=['GET', 'POST'])
+def delete_zseries_recipe():
+    recipe_id = request.get_json()
+    files = list(zseries_recipe_path().glob("*.json"))
+    for filename in files:
+        recipe = load_zseries_recipe(filename)
+        if str(recipe.id) == recipe_id:
+            os.remove(filename)
+            return '', 204
+    return 'Delete Recipe: Failed to find recipe id \"' + recipe_id + '\"', 418
 
 
 def load_zseries_recipes():
@@ -137,7 +217,8 @@ def get_zseries_recipes():
 def _pico_recipes():
     global pico_recipes
     pico_recipes = load_pico_recipes()
-    return render_template('pico_recipes.html', recipes=pico_recipes)
+    recipes_dict = [json.loads(json.dumps(recipe, default=lambda r: r.__dict__)) for recipe in pico_recipes]
+    return render_template('pico_recipes.html', recipes=recipes_dict)
 
 
 @main.route('/new_pico_recipe', methods=['GET', 'POST'])
@@ -180,6 +261,29 @@ def import_pico_recipe():
             return 'Import Failed: \"' + recipe + '\"', 418
     else:
         return render_template('import_pico_recipe.html')
+
+
+@main.route('/update_pico_recipe', methods=['POST'])
+def update_pico_recipe():
+    update = request.get_json()
+    files = list(pico_recipe_path().glob("*.json"))
+    for filename in files:
+        recipe = load_pico_recipe(filename)
+        if recipe.id == update['id']:
+            recipe.update_steps(filename, update['steps'])
+    return '', 204
+
+
+@main.route('/delete_pico_recipe', methods=['GET', 'POST'])
+def delete_pico_recipe():
+    recipe_id = request.get_json()
+    files = list(pico_recipe_path().glob("*.json"))
+    for filename in files:
+        recipe = load_pico_recipe(filename)
+        if recipe.id == recipe_id:
+            os.remove(filename)
+            return '', 204
+    return 'Delete Recipe: Failed to find recipe id \"' + recipe_id + '\"', 418
 
 
 def load_pico_recipes():
