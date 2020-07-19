@@ -2,7 +2,7 @@ aliases: # ProductID (Found under 'Settings'->'Equipment' on www.picobrew.com) m
   Zymatic:
     #ProductID : Nickname
   ZSeries:
-    #ProductID : Nickname
+    240ac41df080 : Tommy's Z1
   PicoBrew:
     #ProductID : Nickname
   PicoFerm:
