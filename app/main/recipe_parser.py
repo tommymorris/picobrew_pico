@@ -25,6 +25,7 @@ class ZymaticRecipeStep():
 
 class ZymaticRecipe():
     def __init__(self):
+        self.clean = False
         self.id = None
         self.name = None
         self.name_ = None
@@ -34,6 +35,7 @@ class ZymaticRecipe():
         recipe = None
         with open(file) as f:
             recipe = json.load(f)
+        self.clean = recipe.get('clean', False) or False
         self.id = recipe.get('id', 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX') or 'XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX'
         self.name = recipe.get('name', 'Empty Recipe') or 'Empty Recipe'
         self.name_ = self.name.replace(" ", "_").replace("\'", "")
@@ -76,6 +78,7 @@ def ZymaticRecipeImport(recipes):
         r = {}
         steps = list(filter(None, recipe.split('/')))
         r['name'] = steps.pop(0)
+        r['clean'] = False
         r['id'] = steps.pop(0)
         r['steps'] = []
         for step in steps:
@@ -102,13 +105,13 @@ class ZSeriesRecipeStep():
         self.drain_time = None
 
     def serialize(self):
-        return '{0},{1},{2},{3},{4}/'.format(
-            self.name,
-            self.temperature,
-            self.step_time,
-            ZSERIES_LOCATION[self.location],
-            self.drain_time
-        )
+        step = {}
+        step['Name'] = self.name
+        step['Location'] = int(ZSERIES_LOCATION[self.location])
+        step['Temp'] = int(self.temperature)
+        step['Time'] = int(self.step_time)
+        step['Drain'] = int(self.drain_time)
+        return step
 
 
 class ZSeriesRecipe():
@@ -148,13 +151,7 @@ class ZSeriesRecipe():
         r['StartWater'] = self.start_water
         r['Steps'] = []
         for step in self.steps:
-            s = {}
-            s['Name'] = step.name
-            s['Location'] = step.location
-            s['Temp'] = step.temperature
-            s['Time'] = step.step_time
-            s['Drain'] = step.drain_time
-            r['Steps'].append(s)
+            r['Steps'].append(step.serialize())
         return r
 
     def update_steps(self, file, steps):

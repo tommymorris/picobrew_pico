@@ -1,9 +1,0 @@
-aliases: # ProductID (Found under 'Settings'->'Equipment' on www.picobrew.com) mapping to friendly nickname
-  Zymatic:
-    #ProductID : Nickname
-  ZSeries:
-    240ac41df080 : Tommy's Z1
-  PicoBrew:
-    #ProductID : Nickname
-  PicoFerm:
-    #ProductID : Nickname

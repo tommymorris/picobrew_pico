@@ -1,4 +1,18 @@
+from enum import Enum
 from flask import current_app
+
+
+class MachineType(str, Enum):
+    PICOBREW = 'PicoBrew'
+    PICOFERM = 'PicoFerm'
+    PICOSTILL = 'PicoStill'
+    ZSERIES = 'ZSeries'
+    ZYMATIC = 'Zymatic'
+
+
+# server config
+def server_config():
+    return current_app.config['SERVER_CONFIG']
 
 
 # base path
@@ -13,6 +27,10 @@ def zseries_firmware_path():
 
 def pico_firmware_path():
     return current_app.config['FIRMWARE_PATH'].joinpath('pico')
+
+
+def picostill_firmware_path():
+    return current_app.config['FIRMWARE_PATH'].joinpath('picostill')
 
 
 # recipe paths
